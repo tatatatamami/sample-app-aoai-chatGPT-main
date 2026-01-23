@@ -748,6 +748,28 @@ class _MongoDbSettings(BaseSettings, DatasourcePayloadConstructor):
             "type": self._type,
             "parameters": parameters
         }
+
+
+class _FoundrySettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="FOUNDRY_",
+        env_file=DOTENV_PATH,
+        extra="ignore",
+        env_ignore_empty=True
+    )
+    
+    enabled: bool = False
+    endpoint: Optional[str] = None
+    bearer_token: Optional[str] = None
+    
+    @model_validator(mode="after")
+    def validate_foundry_config(self) -> Self:
+        if self.enabled:
+            if not self.endpoint:
+                raise ValueError("FOUNDRY_ENDPOINT is required when FOUNDRY_ENABLED is True")
+            if not self.bearer_token:
+                raise ValueError("FOUNDRY_BEARER_TOKEN is required when FOUNDRY_ENABLED is True")
+        return self
         
         
 class _BaseSettings(BaseSettings):
@@ -773,7 +795,18 @@ class _AppSettings(BaseModel):
     chat_history: Optional[_ChatHistorySettings] = None
     datasource: Optional[DatasourcePayloadConstructor] = None
     promptflow: Optional[_PromptflowSettings] = None
+    foundry: Optional[_FoundrySettings] = None
 
+    @model_validator(mode="after")
+    def set_foundry_settings(self) -> Self:
+        try:
+            self.foundry = _FoundrySettings()
+            
+        except ValidationError:
+            self.foundry = None
+            
+        return self
+    
     @model_validator(mode="after")
     def set_promptflow_settings(self) -> Self:
         try:
