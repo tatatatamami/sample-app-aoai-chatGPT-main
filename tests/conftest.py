@@ -33,5 +33,5 @@ def setup_test_env():
     # Cleanup
     try:
         os.unlink(test_env_path)
-    except:
+    except (OSError, FileNotFoundError):
         pass

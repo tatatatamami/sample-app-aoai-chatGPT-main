@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import sys
 import os
 
-# Add the parent directory to the path so we can import the app module
+# Note: sys.path manipulation is used here for mocking purposes only
+# This allows the tests to import app module with mocked dependencies
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 
