@@ -79,14 +79,12 @@ async def test_complete_foundry_request_formats_response():
     """Test that complete_foundry_request properly formats the Foundry response."""
     with patch('app.send_foundry_request') as mock_send, \
          patch('app.uuid.uuid4') as mock_uuid, \
-         patch('app.asyncio.get_event_loop') as mock_loop:
+         patch('app.time.time') as mock_time:
         
         # Setup mocks
         mock_send.return_value = {"response": "This is a test response"}
         mock_uuid.return_value = "test-uuid-12345"
-        mock_time = MagicMock()
-        mock_time.time.return_value = 1234567890
-        mock_loop.return_value = mock_time
+        mock_time.return_value = 1234567890.0
         
         # Import after patching
         from app import complete_foundry_request
@@ -104,6 +102,7 @@ async def test_complete_foundry_request_formats_response():
         # Assertions
         assert result["model"] == "foundry-agent"
         assert result["id"] == "test-uuid-12345"
+        assert result["created"] == 1234567890
         assert result["choices"][0]["messages"][0]["role"] == "assistant"
         assert result["choices"][0]["messages"][0]["content"] == "This is a test response"
         assert result["history_metadata"] == {"test": "metadata"}

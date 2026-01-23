@@ -5,6 +5,7 @@ import logging
 import uuid
 import httpx
 import asyncio
+import time
 from quart import (
     Blueprint,
     Quart,
@@ -329,7 +330,7 @@ async def complete_foundry_request(request_body):
         formatted_response = {
             "id": str(uuid.uuid4()),
             "model": "foundry-agent",
-            "created": int(asyncio.get_event_loop().time()),
+            "created": int(time.time()),
             "object": "chat.completion",
             "choices": [
                 {
