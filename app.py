@@ -104,6 +104,10 @@ frontend_settings = {
     },
     "sanitize_answer": app_settings.base_settings.sanitize_answer,
     "oyd_enabled": app_settings.base_settings.datasource_type,
+    "foundry_enabled": (
+        app_settings.foundry and 
+        app_settings.foundry.enabled
+    ),
 }
 
 
@@ -236,6 +240,117 @@ async def init_cosmosdb_client():
         logging.debug("CosmosDB not configured")
 
     return cosmos_conversation_client
+
+
+async def send_foundry_request(request_body):
+    """Send a request to the Foundry agent API."""
+    if not app_settings.foundry or not app_settings.foundry.enabled:
+        raise ValueError("Foundry is not configured or not enabled")
+    
+    try:
+        # Extract the user message from the request
+        messages = request_body.get("messages", [])
+        if not messages:
+            raise ValueError("No messages found in request")
+        
+        # Get the last user message
+        user_message = None
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                user_message = message.get("content", "")
+                break
+        
+        if not user_message:
+            raise ValueError("No user message found in request")
+        
+        # Prepare the Foundry API request
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {app_settings.foundry.bearer_token}",
+        }
+        
+        # Build conversation history for context
+        conversation_history = []
+        for message in messages[:-1]:  # Exclude the last message as it's the current one
+            if message.get("role") in ["user", "assistant"]:
+                conversation_history.append({
+                    "role": message.get("role"),
+                    "content": message.get("content", "")
+                })
+        
+        # Foundry request payload
+        foundry_payload = {
+            "message": user_message,
+            "history": conversation_history
+        }
+        
+        logging.debug(f"Sending request to Foundry endpoint: {app_settings.foundry.endpoint}")
+        
+        # Send request to Foundry
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                app_settings.foundry.endpoint,
+                json=foundry_payload,
+                headers=headers,
+            )
+        
+        response.raise_for_status()
+        foundry_response = response.json()
+        
+        logging.debug(f"Received response from Foundry: {foundry_response}")
+        
+        return foundry_response
+        
+    except httpx.HTTPError as e:
+        logging.exception("HTTP error in Foundry request")
+        raise Exception(f"Foundry API error: {str(e)}")
+    except Exception as e:
+        logging.exception("Exception in Foundry request")
+        raise e
+
+
+async def complete_foundry_request(request_body):
+    """Complete a Foundry agent request and format the response."""
+    try:
+        foundry_response = await send_foundry_request(request_body)
+        
+        # Extract the response message from Foundry
+        # The exact structure may vary depending on Foundry's API response format
+        response_text = foundry_response.get("response", foundry_response.get("message", ""))
+        
+        if not response_text:
+            # If the response structure is different, try to get any text content
+            response_text = str(foundry_response)
+            logging.warning(f"Unexpected Foundry response structure: {foundry_response}")
+        
+        # Format the response to match the expected structure
+        history_metadata = request_body.get("history_metadata", {})
+        
+        formatted_response = {
+            "id": str(uuid.uuid4()),
+            "model": "foundry-agent",
+            "created": int(asyncio.get_event_loop().time()),
+            "object": "chat.completion",
+            "choices": [
+                {
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "content": response_text,
+                        }
+                    ],
+                    "index": 0,
+                    "finish_reason": "stop",
+                }
+            ],
+            "history_metadata": history_metadata,
+        }
+        
+        return formatted_response
+        
+    except Exception as e:
+        logging.exception("Exception in complete_foundry_request")
+        raise e
 
 
 def prepare_model_args(request_body, request_headers):
@@ -564,6 +679,14 @@ async def stream_chat_request(request_body, request_headers):
 
 async def conversation_internal(request_body, request_headers):
     try:
+        # Check if Foundry is enabled and should be used
+        if app_settings.foundry and app_settings.foundry.enabled:
+            # Use Foundry agent
+            logging.debug("Routing request to Foundry agent")
+            result = await complete_foundry_request(request_body)
+            return jsonify(result)
+        
+        # Use Azure OpenAI (default behavior)
         if app_settings.azure_openai.stream and not app_settings.base_settings.use_promptflow:
             result = await stream_chat_request(request_body, request_headers)
             response = await make_response(format_as_ndjson(result))
