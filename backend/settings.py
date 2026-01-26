@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import logging
@@ -80,6 +81,36 @@ class _PromptflowSettings(BaseSettings):
     request_field_name: str = "query"
     response_field_name: str = "reply"
     citations_field_name: str = "documents"
+
+
+
+
+
+class _FoundrySettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="FOUNDRY_",
+        env_file=DOTENV_PATH,
+        extra="ignore",
+    env_ignore_empty=True
+    )
+
+    enabled: bool = False
+    project: str = ""
+    application: str = ""
+    endpoint: str = ""
+    bearer_token: str = ""
+    use_azure_identity: bool = False
+    api_version: str = "2025-11-15-preview"
+    response_timeout: float = 30.0
+
+    def get_responses_endpoint(self) -> str:
+        """Returns the OpenAI-compatible responses API endpoint"""
+        return f"{self.endpoint}/api/projects/{self.project}/applications/{self.application}/protocols/openai/responses?api-version={self.api_version}"
+    
+    def get_activity_endpoint(self) -> str:
+        """Returns the activity protocol endpoint"""
+        return f"{self.endpoint}/api/projects/{self.project}/applications/{self.application}/protocols/activityprotocol?api-version={self.api_version}"
+
 
 
 class _AzureOpenAIFunction(BaseModel):
@@ -748,8 +779,8 @@ class _MongoDbSettings(BaseSettings, DatasourcePayloadConstructor):
             "type": self._type,
             "parameters": parameters
         }
-        
-        
+
+
 class _BaseSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=DOTENV_PATH,
@@ -763,17 +794,37 @@ class _BaseSettings(BaseSettings):
     use_promptflow: bool = False
 
 
+
+
+
+
+
+
+
+
+
 class _AppSettings(BaseModel):
     base_settings: _BaseSettings = _BaseSettings()
     azure_openai: _AzureOpenAISettings = _AzureOpenAISettings()
     search: _SearchCommonSettings = _SearchCommonSettings()
     ui: Optional[_UiSettings] = _UiSettings()
+    foundry: Optional[_FoundrySettings] = _FoundrySettings()
     
     # Constructed properties
     chat_history: Optional[_ChatHistorySettings] = None
     datasource: Optional[DatasourcePayloadConstructor] = None
     promptflow: Optional[_PromptflowSettings] = None
 
+    @model_validator(mode="after")
+    def set_foundry_settings(self) -> Self:
+        try:
+            self.foundry = _FoundrySettings()
+            
+        except ValidationError:
+            self.foundry = None
+            
+        return self
+    
     @model_validator(mode="after")
     def set_promptflow_settings(self) -> Self:
         try:

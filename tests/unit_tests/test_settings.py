@@ -67,6 +67,20 @@ def test_dotenv_with_elasticsearch_success(app_settings):
     assert payload["parameters"]["endpoint"] == "dummy"
     print(payload)
 
-    
-    
 
+def test_dotenv_foundry_disabled(app_settings):
+    # Validate model object
+    assert app_settings.foundry is not None
+    assert app_settings.foundry.enabled is False
+    assert app_settings.azure_openai is not None
+    print(f"Foundry settings: enabled={app_settings.foundry.enabled}")
+
+
+def test_dotenv_foundry_enabled(app_settings):
+    # Validate model object
+    assert app_settings.foundry is not None
+    assert app_settings.foundry.enabled is True
+    assert app_settings.foundry.endpoint == "https://test-foundry.example.com/api/agent"
+    assert app_settings.foundry.bearer_token == "test-bearer-token-12345"
+    assert app_settings.azure_openai is not None
+    print(f"Foundry settings: enabled={app_settings.foundry.enabled}, endpoint={app_settings.foundry.endpoint}")
