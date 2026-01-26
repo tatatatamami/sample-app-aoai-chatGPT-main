@@ -25,6 +25,7 @@ from azure.identity.aio import (
 from backend.auth.auth_utils import get_authenticated_user_details
 from backend.security.ms_defender_utils import get_msdefender_user_json
 from backend.history.cosmosdbservice import CosmosConversationClient
+from backend.foundry.client import FoundryClient
 from backend.settings import (
     app_settings,
     MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION
@@ -254,51 +255,20 @@ async def send_foundry_request(request_body):
         if not messages:
             raise ValueError("No messages found in request")
         
-        # Get the last user message
-        user_message = None
-        for message in reversed(messages):
-            if message.get("role") == "user":
-                user_message = message.get("content", "")
-                break
+        # Initialize Foundry client
+        foundry_client = await init_foundry_client()
+        if not foundry_client:
+            raise ValueError("Failed to initialize Foundry client")
         
-        if not user_message:
-            raise ValueError("No user message found in request")
+        # Send message using the Foundry client
+        logging.debug(f"Sending request to Foundry endpoint")
         
-        # Prepare the Foundry API request
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {app_settings.foundry.bearer_token}",
-        }
-        
-        # Build conversation history for context
-        conversation_history = []
-        for message in messages[:-1]:  # Exclude the last message as it's the current one
-            if message.get("role") in ["user", "assistant"]:
-                conversation_history.append({
-                    "role": message.get("role"),
-                    "content": message.get("content", "")
-                })
-        
-        # Foundry request payload
-        foundry_payload = {
-            "message": user_message,
-            "history": conversation_history
-        }
-        
-        logging.debug(f"Sending request to Foundry endpoint: {app_settings.foundry.endpoint}")
-        
-        # Send request to Foundry
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                app_settings.foundry.endpoint,
-                json=foundry_payload,
-                headers=headers,
-            )
-        
-        response.raise_for_status()
-        foundry_response = response.json()
+        # Use non-streaming mode for now
+        foundry_response = await foundry_client.send_message_non_streaming(messages)
         
         logging.debug(f"Received response from Foundry: {foundry_response}")
+        
+        await foundry_client.close()
         
         return foundry_response
         
@@ -315,14 +285,57 @@ async def complete_foundry_request(request_body):
     try:
         foundry_response = await send_foundry_request(request_body)
         
+        logging.debug(f"Raw Foundry response keys: {foundry_response.keys() if isinstance(foundry_response, dict) else 'not a dict'}")
+        
         # Extract the response message from Foundry
-        # The exact structure may vary depending on Foundry's API response format
-        response_text = foundry_response.get("response", foundry_response.get("message", ""))
+        response_text = None
+        
+        # Foundry Responses API structure:
+        # response = {
+        #   "output": [
+        #     {"type": "mcp_list_tools", ...},
+        #     {"type": "mcp_call", ...},
+        #     {"type": "file_search_call", ...},
+        #     {"type": "message", "content": [{"type": "output_text", "text": "..."}]}
+        #   ]
+        # }
+        
+        if isinstance(foundry_response, dict) and "output" in foundry_response:
+            output_list = foundry_response["output"]
+            if isinstance(output_list, list):
+                # Find the message object in the output list
+                for item in output_list:
+                    if isinstance(item, dict) and item.get("type") == "message":
+                        content = item.get("content", [])
+                        if isinstance(content, list) and len(content) > 0:
+                            # Get the text from the first content item
+                            first_content = content[0]
+                            if isinstance(first_content, dict):
+                                response_text = first_content.get("text")
+                                if response_text:
+                                    break
+        
+        # Fallback paths for other possible structures
+        if not response_text:
+            if isinstance(foundry_response, dict):
+                # Try other possible paths
+                if "choices" in foundry_response and len(foundry_response["choices"]) > 0:
+                    choice = foundry_response["choices"][0]
+                    if "message" in choice and "content" in choice["message"]:
+                        response_text = choice["message"]["content"]
+                elif "response" in foundry_response:
+                    response_text = foundry_response["response"]
+                elif "message" in foundry_response:
+                    response_text = foundry_response["message"]
+                elif "content" in foundry_response:
+                    response_text = foundry_response["content"]
         
         if not response_text:
-            # If the response structure is different, try to get any text content
-            response_text = str(foundry_response)
-            logging.warning(f"Unexpected Foundry response structure: {foundry_response}")
+            # Final fallback: convert entire response to string
+            response_text = json.dumps(foundry_response, ensure_ascii=False, indent=2)
+            logging.warning(f"Could not extract text from Foundry response, using full JSON")
+        
+        logging.info(f"Extracted response text ({len(response_text)} chars): {response_text[:100]}...")
         
         # Format the response to match the expected structure
         history_metadata = request_body.get("history_metadata", {})
@@ -1182,6 +1195,100 @@ async def generate_title(conversation_messages) -> str:
     except Exception as e:
         logging.exception("Exception while generating title", e)
         return messages[-2]["content"]
+
+
+# Initialize Foundry Client
+async def init_foundry_client():
+    """Initialize Foundry Agent client"""
+    if not app_settings.foundry or not app_settings.foundry.enabled:
+        return None
+    
+    try:
+        endpoint = app_settings.foundry.get_responses_endpoint()
+        
+        # Choose authentication method
+        credential = None
+        bearer_token = app_settings.foundry.bearer_token
+        
+        if app_settings.foundry.use_azure_identity:
+            # Use Azure Identity (DefaultAzureCredential)
+            from azure.identity.aio import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+            logging.info("Using Azure Identity (DefaultAzureCredential) for Foundry authentication")
+        elif not bearer_token:
+            logging.warning("Foundry is enabled but neither FOUNDRY_BEARER_TOKEN nor FOUNDRY_USE_AZURE_IDENTITY is set")
+            return None
+        
+        client = FoundryClient(
+            endpoint=endpoint,
+            bearer_token=bearer_token if not app_settings.foundry.use_azure_identity else None,
+            credential=credential,
+            timeout=app_settings.foundry.response_timeout
+        )
+        
+        logging.info(f"Foundry client initialized with endpoint: {endpoint}")
+        return client
+        
+    except Exception as e:
+        logging.exception("Failed to initialize Foundry client")
+        return None
+
+
+@bp.route("/foundry/conversation", methods=["POST"])
+async def foundry_conversation():
+    """Handle conversation with Foundry Agent"""
+    
+    if not app_settings.foundry or not app_settings.foundry.enabled:
+        return jsonify({"error": "Foundry is not enabled"}), 400
+    
+    try:
+        request_json = await request.get_json()
+        messages = request_json.get("messages", [])
+        
+        if not messages:
+            return jsonify({"error": "messages is required"}), 400
+        
+        # Initialize Foundry client
+        foundry_client = await init_foundry_client()
+        if not foundry_client:
+            return jsonify({"error": "Failed to initialize Foundry client"}), 500
+        
+        # Determine if streaming is requested
+        stream = request_json.get("stream", True)
+        
+        if stream:
+            # Streaming response
+            async def generate():
+                try:
+                    async for chunk in foundry_client.send_message(messages, stream=True):
+                        yield f"data: {chunk}\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logging.exception("Error during Foundry streaming")
+                    error_response = {"error": str(e)}
+                    yield f"data: {json.dumps(error_response)}\n\n"
+                finally:
+                    await foundry_client.close()
+            
+            response = await make_response(generate())
+            response.headers["Content-Type"] = "text/event-stream"
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["X-Accel-Buffering"] = "no"
+            return response
+        else:
+            # Non-streaming response
+            try:
+                result = await foundry_client.send_message_non_streaming(messages)
+                return jsonify(result), 200
+            except Exception as e:
+                logging.exception("Error during Foundry non-streaming request")
+                return jsonify({"error": str(e)}), 500
+            finally:
+                await foundry_client.close()
+                
+    except Exception as e:
+        logging.exception("Exception in /foundry/conversation")
+        return jsonify({"error": str(e)}), 500
 
 
 app = create_app()
