@@ -1,0 +1,89 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+.venv
+venv/
+env/
+.python_packages/
+
+# Environment
+.env
+.env.local
+
+# Frontend source (we only need the built static files)
+frontend/node_modules
+frontend/src
+frontend/dist
+frontend/build
+frontend/.vscode
+frontend/package.json
+frontend/package-lock.json
+frontend/tsconfig.json
+frontend/vite.config.ts
+
+# Azure
+.azure/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~
+
+# Logs and temporary files
+*.log
+*.zip
+app-logs.zip
+deployment-logs.zip
+latest-logs.zip
+build-error-logs.zip
+
+# Documentation
+README.md
+docs/
+notebooks/
+
+# Tests
+tests/
+pytest.ini
+
+# Infrastructure (not needed in container)
+infrastructure/
+infra/
+scripts/
+
+# Docker
+docker-compose.yml
+.dockerignore
+- Dockerfile
+
+# Deployment files
+deploy.zip
+env.json
