@@ -1,0 +1,6 @@
+@FoundryChat_HostAddress = http://localhost:5113
+
+GET {{FoundryChat_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
