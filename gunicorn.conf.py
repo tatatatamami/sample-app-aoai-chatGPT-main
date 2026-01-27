@@ -10,4 +10,5 @@ timeout = 230
 
 num_cpus = multiprocessing.cpu_count()
 workers = (num_cpus * 2) + 1
-worker_class = "uvicorn.workers.UvicornWorker"
+# Quart uses ASGI, not compatible with gunicorn's default worker
+# Use hypercorn instead (configured in startup command)
