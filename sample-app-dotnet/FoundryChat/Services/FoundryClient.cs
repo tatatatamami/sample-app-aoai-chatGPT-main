@@ -11,13 +11,12 @@ namespace FoundryChat.Services;
 /// <summary>
 /// Client for Azure AI Foundry Agent API
 /// </summary>
-public class FoundryClient : IFoundryClient, IDisposable
+public class FoundryClient : IFoundryClient
 {
     private readonly HttpClient _httpClient;
     private readonly FoundrySettings _settings;
     private readonly TokenCredential? _credential;
     private readonly ILogger<FoundryClient> _logger;
-    private bool _disposed;
 
     public FoundryClient(
         HttpClient httpClient,
@@ -224,15 +223,6 @@ public class FoundryClient : IFoundryClient, IDisposable
         {
             _logger.LogError(ex, $"Unexpected error: {ex.Message}");
             throw;
-        }
-    }
-
-    public void Dispose()
-    {
-        if (!_disposed)
-        {
-            _httpClient?.Dispose();
-            _disposed = true;
         }
     }
 }
