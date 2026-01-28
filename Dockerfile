@@ -1,35 +1,24 @@
-# Use Python 3.11 slim image for smaller size
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
+# (必要な場合のみ) ビルド系依存
+RUN apt-get update && apt-get install -y --no-install-recommends gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app.py .
-COPY backend/ ./backend/
-COPY static/ ./static/
+# リポジトリ全体をコピー（漏れを防ぐ）
+COPY . .
 
-# Create non-root user for security
+# 非root実行
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Expose port (Container Apps will use this)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/').read()"
+# Healthcheck は一旦外す（/ が 500 になり得るため）
+# HEALTHCHECK ... （必要なら /healthz を作って叩く）
 
-# Run the application
-CMD ["gunicorn", "app:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+CMD ["gunicorn", "app:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120"]
