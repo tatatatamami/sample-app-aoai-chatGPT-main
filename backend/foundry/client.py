@@ -97,8 +97,10 @@ class FoundryClient:
         
         
         
-        # Foundry Responses API expects the user's message content as 'input'
-        # Extract the last user message
+        
+        
+        # Foundry Responses API: Send conversation history
+        # Extract the last user message for 'input' field
         user_message = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -108,14 +110,26 @@ class FoundryClient:
         if not user_message:
             raise ValueError("No user message found in messages")
         
+        # Build conversation history for context (excluding the last user message)
+        conversation_history = []
+        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role and content:
+                conversation_history.append({
+                    "role": role,
+                    "content": content
+                })
+        
         payload = {
-            "input": user_message,  # Send only the user's message content
+            "input": user_message,  # Current user message
+            "conversationHistory": conversation_history,  # Previous messages for context
             "stream": stream,
             **kwargs
         }
         
         logger.debug(f"Sending request to Foundry: {self.endpoint}")
-        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
+        logger.debug(f"Conversation history: {len(conversation_history)} messages")
         
         try:
             if stream:
@@ -187,8 +201,8 @@ class FoundryClient:
             logger.error(f"Failed to get bearer token: {str(e)}")
             raise
         
-        # Foundry Responses API expects the user's message content as 'input'
-        # Extract the last user message
+        # Foundry Responses API: Send conversation history
+        # Extract the last user message for 'input' field
         user_message = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -198,11 +212,25 @@ class FoundryClient:
         if not user_message:
             raise ValueError("No user message found in messages")
         
+        # Build conversation history for context (excluding the last user message)
+        conversation_history = []
+        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role and content:
+                conversation_history.append({
+                    "role": role,
+                    "content": content
+                })
+        
         payload = {
-            "input": user_message,  # Send only the user's message content
+            "input": user_message,  # Current user message
+            "conversationHistory": conversation_history,  # Previous messages for context
             "stream": False,
             **kwargs
         }
+        
+        logger.debug(f"Sending request with {len(conversation_history)} history messages")
         
         logger.debug(f"Sending non-streaming request to Foundry: {self.endpoint}")
         

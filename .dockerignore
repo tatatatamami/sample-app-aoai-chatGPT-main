@@ -45,6 +45,8 @@ frontend/vite.config.ts
 *.userosscache
 *.sln.docstates
 *.userprefs
+*.slnx
+*.vsidx
 
 # Visual Studio Code
 .vscode/
