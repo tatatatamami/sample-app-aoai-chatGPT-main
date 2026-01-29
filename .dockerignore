@@ -21,16 +21,11 @@ env/
 .env
 .env.local
 
-# Frontend source (we only need the built static files)
+# Frontend build artifacts (not source)
 frontend/node_modules
-frontend/src
 frontend/dist
 frontend/build
 frontend/.vscode
-frontend/package.json
-frontend/package-lock.json
-frontend/tsconfig.json
-frontend/vite.config.ts
 
 # Azure
 .azure/
