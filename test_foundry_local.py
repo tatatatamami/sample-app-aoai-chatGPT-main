@@ -35,11 +35,19 @@ async def test_foundry():
         timeout=60.0
     )
     
-    # Test messages
+    # Test messages with conversation history
     messages = [
         {
             "role": "user",
-            "content": "Tell me about incident response"  # Changed to English
+            "content": "Tell me about incident response"
+        },
+        {
+            "role": "assistant",
+            "content": "I can help with incident response. What's the issue?"
+        },
+        {
+            "role": "user",
+            "content": "Voice calls are not connecting. Started in one area, now nationwide."
         }
     ]
     

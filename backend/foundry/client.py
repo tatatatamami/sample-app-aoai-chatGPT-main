@@ -102,7 +102,8 @@ class FoundryClient:
         
         
         # Foundry Responses API format
-        # Last message goes to 'input', previous messages go to 'conversationHistory'
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
         if not messages:
             raise ValueError("Messages cannot be empty")
         
@@ -110,27 +111,14 @@ class FoundryClient:
         last_message = messages[-1]
         input_text = last_message.get("content", "")
         
-        # Previous messages become conversation history
-        conversation_history = []
-        if len(messages) > 1:
-            for msg in messages[:-1]:
-                conversation_history.append({
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", "")
-                })
-        
         payload = {
             "input": input_text,
             "stream": stream,
             **kwargs
         }
         
-        # Only add conversationHistory if there are previous messages
-        if conversation_history:
-            payload["conversationHistory"] = conversation_history
-        
         logger.debug(f"Sending request to Foundry: {self.endpoint}")
-        logger.debug(f"Input with {len(conversation_history)} history messages")
+        logger.debug(f"Input only (no conversation history)")
         
         try:
             if stream:
@@ -203,7 +191,8 @@ class FoundryClient:
             raise
         
         # Foundry Responses API format
-        # Last message goes to 'input', previous messages go to 'conversationHistory'
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
         if not messages:
             raise ValueError("Messages cannot be empty")
         
@@ -211,26 +200,13 @@ class FoundryClient:
         last_message = messages[-1]
         input_text = last_message.get("content", "")
         
-        # Previous messages become conversation history
-        conversation_history = []
-        if len(messages) > 1:
-            for msg in messages[:-1]:
-                conversation_history.append({
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", "")
-                })
-        
         payload = {
             "input": input_text,
             "stream": False,
             **kwargs
         }
         
-        # Only add conversationHistory if there are previous messages
-        if conversation_history:
-            payload["conversationHistory"] = conversation_history
-        
-        logger.debug(f"Sending request with input and {len(conversation_history)} history messages")
+        logger.debug(f"Sending request with input only (no conversation history)")
         logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
         
         logger.debug(f"Sending non-streaming request to Foundry: {self.endpoint}")
