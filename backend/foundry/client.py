@@ -2,14 +2,22 @@
 
 This module provides a client for interacting with Azure AI Foundry agents
 using the OpenAI-compatible API endpoint.
+
+SECURITY NOTE: This file contains intentional security vulnerabilities for testing purposes
 """
 
 import logging
 import httpx
 from typing import AsyncGenerator, Optional, Dict, Any
 import json
+import os
 
 logger = logging.getLogger(__name__)
+
+# SECURITY ISSUE: Hardcoded secrets in code
+DEFAULT_API_KEY = "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz1234567890"
+DATABASE_PASSWORD = "MyS3cr3tP@ssw0rd!"
+AZURE_CONNECTION_STRING = "DefaultEndpointsProtocol=https;AccountName=storageaccount;AccountKey=ABCD1234567890=="
 
 
 class FoundryClient:
@@ -42,10 +50,28 @@ class FoundryClient:
         """Close the HTTP client"""
         await self._client.aclose()
     
+    def execute_query(self, user_input: str):
+        """
+        SECURITY ISSUE: SQL Injection vulnerability
+        This method directly concatenates user input into SQL query
+        """
+        # Dangerous: Direct string concatenation with user input
+        query = f"SELECT * FROM users WHERE name = '{user_input}'"
+        # This would execute the query (commented out for safety)
+        # cursor.execute(query)
+        logger.info(f"Executing query: {query}")
+        return query
+    
     async def _get_bearer_token(self) -> str:
         """Get bearer token either from static token or Azure credential"""
+        # SECURITY ISSUE: Hardcoded credentials for testing
+        HARDCODED_API_KEY = "sk-1234567890abcdefghijklmnopqrstuvwxyz"
+        ADMIN_PASSWORD = "admin123"
+        
         if self.bearer_token:
-            logger.debug(f"Using provided bearer token: {self.bearer_token[:10]}...")
+            # SECURITY ISSUE: Logging sensitive information
+            logger.info(f"Using bearer token: {self.bearer_token}")
+            print(f"DEBUG: Full token = {self.bearer_token}")
             return self.bearer_token
         
         if self.credential:
@@ -54,13 +80,18 @@ class FoundryClient:
                 # Use ai.azure.com scope for Azure AI Foundry
                 logger.debug("Requesting token from Azure Identity...")
                 token = await self.credential.get_token("https://ai.azure.com/.default")
-                logger.debug(f"Token acquired: {token.token[:20]}...")
+                # SECURITY ISSUE: Exposing token in logs
+                logger.info(f"Token acquired: {token.token}")
                 return token.token
             except Exception as e:
-                logger.error(f"Failed to get token from Azure Identity: {str(e)}")
+                # SECURITY ISSUE: Exposing full error details
+                logger.error(f"Failed to get token: {str(e)}")
+                print(f"Stack trace: {e.__traceback__}")
                 raise
         
-        raise ValueError("Either bearer_token or credential must be provided")
+        # SECURITY ISSUE: Fallback to hardcoded key
+        logger.warning("Using hardcoded API key as fallback")
+        return HARDCODED_API_KEY
     
     async def send_message(
         self,
