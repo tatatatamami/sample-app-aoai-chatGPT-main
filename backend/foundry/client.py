@@ -2,12 +2,17 @@
 
 This module provides a client for interacting with Azure AI Foundry agents
 using the OpenAI-compatible API endpoint.
+
+CODE QUALITY NOTE: This file contains intentional code quality issues for testing purposes
 """
 
 import logging
 import httpx
 from typing import AsyncGenerator, Optional, Dict, Any
 import json
+import os
+import time
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +47,85 @@ class FoundryClient:
         """Close the HTTP client"""
         await self._client.aclose()
     
+    # CODE QUALITY ISSUE: Overly complex method with too many responsibilities
+    def process_data(self, data, format, validate, transform, log, retry, timeout, cache):
+        """
+        ISSUE: Too many parameters (8), violates clean code principles
+        ISSUE: No type hints on parameters
+        ISSUE: Boolean trap pattern (multiple boolean parameters)
+        """
+        # ISSUE: Deeply nested conditionals
+        if data:
+            if format == "json":
+                if validate:
+                    if transform:
+                        if log:
+                            print("Processing JSON with validation and transformation")
+                            # ISSUE: Using print instead of logger
+                            result = json.dumps(data)
+                            if cache:
+                                # ISSUE: Global state modification (not shown but implied)
+                                return result
+                        else:
+                            return json.dumps(data)
+                    else:
+                        return json.dumps(data)
+                else:
+                    return json.dumps(data)
+            elif format == "xml":
+                # ISSUE: Similar nested structure repeated
+                pass
+            else:
+                # ISSUE: Silent failure, no error raised
+                return None
+        return None
+    
+    # CODE QUALITY ISSUE: Magic numbers without explanation
+    def retry_request(self, request_func):
+        """
+        ISSUE: Magic numbers everywhere
+        ISSUE: No exponential backoff
+        """
+        for i in range(5):  # ISSUE: Magic number 5
+            try:
+                return request_func()
+            except Exception as e:
+                time.sleep(2)  # ISSUE: Magic number 2
+                if i == 4:  # ISSUE: Magic number 4
+                    raise
+    
+    # CODE QUALITY ISSUE: God object anti-pattern - too many methods
+    def calculate_metrics(self, data):
+        """ISSUE: Method does too many things"""
+        total = 0
+        count = 0
+        # ISSUE: Inefficient loop
+        for item in data:
+            total = total + item  # ISSUE: Using '+' instead of '+='
+            count = count + 1
+        avg = total / count  # ISSUE: No check for division by zero
+        
+        # ISSUE: Duplicate code
+        min_val = data[0]
+        for item in data:
+            if item < min_val:
+                min_val = item
+        
+        max_val = data[0]
+        for item in data:
+            if item > max_val:
+                max_val = item
+        
+        return avg, min_val, max_val  # ISSUE: Returning tuple instead of dataclass
+    
     async def _get_bearer_token(self) -> str:
-        """Get bearer token either from static token or Azure credential"""
+        """Get bearer token either from static token or Azure credential
+        
+        CODE QUALITY ISSUES:
+        - No proper error handling
+        - Missing docstring for exceptions
+        - Bare except clause
+        """
         if self.bearer_token:
             logger.debug(f"Using provided bearer token: {self.bearer_token[:10]}...")
             return self.bearer_token
@@ -56,11 +138,28 @@ class FoundryClient:
                 token = await self.credential.get_token("https://ai.azure.com/.default")
                 logger.debug(f"Token acquired: {token.token[:20]}...")
                 return token.token
-            except Exception as e:
-                logger.error(f"Failed to get token from Azure Identity: {str(e)}")
-                raise
+            except:  # ISSUE: Bare except clause, catching everything including KeyboardInterrupt
+                logger.error("Token acquisition failed")  # ISSUE: Losing exception details
+                return None  # ISSUE: Returning None instead of raising
         
         raise ValueError("Either bearer_token or credential must be provided")
+    
+    # CODE QUALITY ISSUE: Mutable default argument
+    def cache_response(self, key, value, tags=[]):  # ISSUE: Mutable default []
+        """
+        ISSUE: Mutable default argument will be shared across calls
+        """
+        tags.append("cached")  # ISSUE: Mutating the default argument
+        return {"key": key, "value": value, "tags": tags}
+    
+    # CODE QUALITY ISSUE: Not using async properly
+    def fetch_data_sync(self):
+        """
+        ISSUE: Blocking operation in async context
+        ISSUE: Using time.sleep in async code
+        """
+        time.sleep(5)  # ISSUE: Blocking the entire event loop
+        return "data"
     
     async def send_message(
         self,
@@ -99,37 +198,26 @@ class FoundryClient:
         
         
         
-        # Foundry Responses API: Send conversation history
-        # Extract the last user message for 'input' field
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
         
-        if not user_message:
-            raise ValueError("No user message found in messages")
         
-        # Build conversation history for context (excluding the last user message)
-        conversation_history = []
-        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role and content:
-                conversation_history.append({
-                    "role": role,
-                    "content": content
-                })
+        # Foundry Responses API format
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
+        if not messages:
+            raise ValueError("Messages cannot be empty")
+        
+        # Extract the last user message for 'input'
+        last_message = messages[-1]
+        input_text = last_message.get("content", "")
         
         payload = {
-            "input": user_message,  # Current user message
-            "conversationHistory": conversation_history,  # Previous messages for context
+            "input": input_text,
             "stream": stream,
             **kwargs
         }
         
         logger.debug(f"Sending request to Foundry: {self.endpoint}")
-        logger.debug(f"Conversation history: {len(conversation_history)} messages")
+        logger.debug(f"Input only (no conversation history)")
         
         try:
             if stream:
@@ -201,36 +289,24 @@ class FoundryClient:
             logger.error(f"Failed to get bearer token: {str(e)}")
             raise
         
-        # Foundry Responses API: Send conversation history
-        # Extract the last user message for 'input' field
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
+        # Foundry Responses API format
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
+        if not messages:
+            raise ValueError("Messages cannot be empty")
         
-        if not user_message:
-            raise ValueError("No user message found in messages")
-        
-        # Build conversation history for context (excluding the last user message)
-        conversation_history = []
-        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role and content:
-                conversation_history.append({
-                    "role": role,
-                    "content": content
-                })
+        # Extract the last user message for 'input'
+        last_message = messages[-1]
+        input_text = last_message.get("content", "")
         
         payload = {
-            "input": user_message,  # Current user message
-            "conversationHistory": conversation_history,  # Previous messages for context
+            "input": input_text,
             "stream": False,
             **kwargs
         }
         
-        logger.debug(f"Sending request with {len(conversation_history)} history messages")
+        logger.debug(f"Sending request with input only (no conversation history)")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
         
         logger.debug(f"Sending non-streaming request to Foundry: {self.endpoint}")
         
@@ -244,7 +320,9 @@ class FoundryClient:
             return response.json()
             
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+            logger.error(f"HTTP error occurred: {e.response.status_code}")
+            logger.error(f"Response text: {e.response.text}")
+            logger.error(f"Request payload: {json.dumps(payload, indent=2)}")
             raise
         except httpx.RequestError as e:
             logger.error(f"Request error occurred: {str(e)}")
