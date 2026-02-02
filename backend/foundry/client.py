@@ -99,37 +99,26 @@ class FoundryClient:
         
         
         
-        # Foundry Responses API: Send conversation history
-        # Extract the last user message for 'input' field
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
         
-        if not user_message:
-            raise ValueError("No user message found in messages")
         
-        # Build conversation history for context (excluding the last user message)
-        conversation_history = []
-        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role and content:
-                conversation_history.append({
-                    "role": role,
-                    "content": content
-                })
+        # Foundry Responses API format
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
+        if not messages:
+            raise ValueError("Messages cannot be empty")
+        
+        # Extract the last user message for 'input'
+        last_message = messages[-1]
+        input_text = last_message.get("content", "")
         
         payload = {
-            "input": user_message,  # Current user message
-            "conversationHistory": conversation_history,  # Previous messages for context
+            "input": input_text,
             "stream": stream,
             **kwargs
         }
         
         logger.debug(f"Sending request to Foundry: {self.endpoint}")
-        logger.debug(f"Conversation history: {len(conversation_history)} messages")
+        logger.debug(f"Input only (no conversation history)")
         
         try:
             if stream:
@@ -201,36 +190,24 @@ class FoundryClient:
             logger.error(f"Failed to get bearer token: {str(e)}")
             raise
         
-        # Foundry Responses API: Send conversation history
-        # Extract the last user message for 'input' field
-        user_message = None
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                user_message = msg.get("content", "")
-                break
+        # Foundry Responses API format
+        # Send only the last message as 'input'
+        # Do not send conversation history (API doesn't support it in current version)
+        if not messages:
+            raise ValueError("Messages cannot be empty")
         
-        if not user_message:
-            raise ValueError("No user message found in messages")
-        
-        # Build conversation history for context (excluding the last user message)
-        conversation_history = []
-        for i, msg in enumerate(messages[:-1]):  # All messages except the last one
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role and content:
-                conversation_history.append({
-                    "role": role,
-                    "content": content
-                })
+        # Extract the last user message for 'input'
+        last_message = messages[-1]
+        input_text = last_message.get("content", "")
         
         payload = {
-            "input": user_message,  # Current user message
-            "conversationHistory": conversation_history,  # Previous messages for context
+            "input": input_text,
             "stream": False,
             **kwargs
         }
         
-        logger.debug(f"Sending request with {len(conversation_history)} history messages")
+        logger.debug(f"Sending request with input only (no conversation history)")
+        logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
         
         logger.debug(f"Sending non-streaming request to Foundry: {self.endpoint}")
         
@@ -244,7 +221,9 @@ class FoundryClient:
             return response.json()
             
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+            logger.error(f"HTTP error occurred: {e.response.status_code}")
+            logger.error(f"Response text: {e.response.text}")
+            logger.error(f"Request payload: {json.dumps(payload, indent=2)}")
             raise
         except httpx.RequestError as e:
             logger.error(f"Request error occurred: {str(e)}")
